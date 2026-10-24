@@ -72,3 +72,115 @@ module GFDeliverScreenshotFix
 end
 
 Deliver::UploadScreenshots.prepend(GFDeliverScreenshotFix)
+
+# fastlane 2.232 creates a version localization with only `locale`. App Store
+# Connect requires description, keywords, and supportUrl on that POST, and
+# rejects the POST entirely once the version has been submitted for review.
+# Metadata for those fields already lives in fastlane/metadata/<locale>/.
+module GFDeliverVersionLocalizationFix
+  SUBMITTED_VERSION_STATES = %w[
+    WAITING_FOR_REVIEW
+    IN_REVIEW
+    PENDING_DEVELOPER_RELEASE
+    PENDING_APPLE_RELEASE
+    READY_FOR_SALE
+    READY_FOR_DISTRIBUTION
+  ].freeze
+
+  CREATE_ATTRIBUTE_KEYS = {
+    description: "description",
+    keywords: "keywords",
+    support_url: "supportUrl",
+    marketing_url: "marketingUrl",
+    promotional_text: "promotionalText"
+  }.freeze
+
+  def verify_available_version_languages!(app, languages)
+    platform = Spaceship::ConnectAPI::Platform.map(options[:platform])
+    version = fetch_edit_app_store_version(app, platform)
+
+    unless version
+      FastlaneCore::UI.user_error!("Cannot update languages - could not find an editable version for '#{platform}'")
+      return
+    end
+
+    localizations = version.get_app_store_version_localizations
+    languages = (languages || []).reject { |lang| lang.to_s == "default" }
+    locales_to_enable = languages.map(&:to_s) - localizations.map { |localization| localization.locale.to_s }
+    return localizations if locales_to_enable.empty?
+
+    state = version.app_version_state.to_s
+    if SUBMITTED_VERSION_STATES.include?(state)
+      FastlaneCore::UI.important("Version #{version.version_string} is #{state}. Leaving existing localizations unchanged and skipping #{locales_to_enable.join(', ')}.")
+      return localizations
+    end
+
+    created = false
+    locales_to_enable.each do |locale|
+      attributes = version_localization_create_attributes(locale)
+      missing = %w[description keywords supportUrl].select { |key| attributes[key].to_s.strip.empty? }
+      unless missing.empty?
+        FastlaneCore::UI.user_error!("Cannot add #{locale}: fastlane/metadata/#{locale}/ is missing #{missing.join(', ')}")
+      end
+
+      begin
+        FastlaneCore::UI.message("Creating #{locale} with description, keywords, and supportUrl")
+        version.create_app_store_version_localization(attributes: attributes)
+        created = true
+      rescue Spaceship::UnexpectedResponse => error
+        raise unless submitted_version_error?(error)
+
+        FastlaneCore::UI.important("Skipping new locale #{locale}: version already submitted for review.")
+      end
+    end
+
+    created ? version.get_app_store_version_localizations : localizations
+  end
+
+  def version_localization_create_attributes(locale)
+    attributes = { "locale" => locale.to_s }
+    CREATE_ATTRIBUTE_KEYS.each do |option_key, api_key|
+      value = localized_option(option_key, locale)
+      attributes[api_key] = value unless value.empty?
+    end
+    attributes
+  end
+
+  def localized_option(option_key, locale)
+    values = options[option_key] || options[option_key.to_s]
+    return "" unless values.is_a?(Hash)
+
+    raw = values[locale] || values[locale.to_s] || values[locale.to_sym]
+    raw.to_s.strip
+  end
+
+  def submitted_version_error?(error)
+    error.message.to_s.include?("submitted for review")
+  end
+end
+
+Deliver::UploadMetadata.prepend(GFDeliverVersionLocalizationFix) if defined?(Deliver::UploadMetadata)
+
+# A submitted version still accepts the metadata upload path. Locked field
+# updates must not fail the listing step; validation errors still raise.
+module GFDeliverSubmittedVersionWrite
+  def update(client: nil, attributes: nil)
+    super
+  rescue StandardError => error
+    message = error.message.to_s
+    unless message.match?(/submitted for review|waiting for review|not editable|cannot be edited|cannot be modified|not in an editable state/i)
+      raise
+    end
+
+    FastlaneCore::UI.important("App Store Connect left this record unchanged because the version is already submitted.")
+    self
+  end
+end
+
+if defined?(Spaceship::ConnectAPI::AppStoreVersion)
+  Spaceship::ConnectAPI::AppStoreVersion.prepend(GFDeliverSubmittedVersionWrite)
+end
+
+if defined?(Spaceship::ConnectAPI::AppStoreVersionLocalization)
+  Spaceship::ConnectAPI::AppStoreVersionLocalization.prepend(GFDeliverSubmittedVersionWrite)
+end
