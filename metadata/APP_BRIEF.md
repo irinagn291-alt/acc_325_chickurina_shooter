@@ -1,4 +1,4 @@
-<!-- gf-brief source=6d9a2509e56e52a5427bf881084baae053d7764bedc7ecefabd52b1e7c04b5e3 written=2026-10-24T17:46:37+03:00 -->
+<!-- gf-brief source=6d9a2509e56e52a5427bf881084baae053d7764bedc7ecefabd52b1e7c04b5e3 written=2026-10-24T20:22:11+03:00 -->
 # Chicken Shoot
 
 ## What it is
