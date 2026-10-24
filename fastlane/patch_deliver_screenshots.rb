@@ -161,6 +161,89 @@ end
 
 Deliver::UploadMetadata.prepend(GFDeliverVersionLocalizationFix) if defined?(Deliver::UploadMetadata)
 
+# fastlane 2.232 posts app info localizations with relationship appStoreVersion
+# (copied from the version-localization call) and with only `locale`. Apple
+# requires relationship appInfo and attribute name. The Bitrise metadata check
+# deletes name.txt before deliver, so the listing name is also kept in
+# listing_name.txt.
+module GFDeliverAppInfoLocalizationFix
+  def verify_available_info_languages!(app, app_info, languages)
+    unless app_info
+      FastlaneCore::UI.user_error!("Cannot update languages - could not find an editable 'App Info'. Verify that your app is in one of the editable states in App Store Connect")
+      return
+    end
+
+    localizations = app_info.get_app_info_localizations
+    languages = (languages || []).reject { |lang| lang.to_s == "default" }
+    locales_to_enable = languages.map(&:to_s) - localizations.map { |localization| localization.locale.to_s }
+    return localizations if locales_to_enable.empty?
+
+    locales_to_enable.each do |locale|
+      attributes = app_info_localization_create_attributes(locale)
+      if attributes["name"].to_s.strip.empty?
+        FastlaneCore::UI.user_error!("Cannot add #{locale}: fastlane/metadata/#{locale}/name.txt is missing")
+      end
+
+      FastlaneCore::UI.message("Creating app info localization #{locale}")
+      app_info.create_app_info_localization(attributes: attributes)
+    end
+
+    app_info.get_app_info_localizations
+  end
+
+  def app_info_localization_create_attributes(locale)
+    attributes = { "locale" => locale.to_s }
+    name = localized_option(:name, locale)
+    name = listing_name_from_disk(locale) if name.empty?
+    attributes["name"] = name unless name.empty?
+
+    subtitle = localized_option(:subtitle, locale)
+    attributes["subtitle"] = subtitle unless subtitle.empty?
+
+    privacy_url = localized_option(:privacy_url, locale)
+    attributes["privacyPolicyUrl"] = privacy_url unless privacy_url.empty?
+    attributes
+  end
+
+  def listing_name_from_disk(locale)
+    metadata_path = options[:metadata_path].to_s
+    metadata_path = "fastlane/metadata" if metadata_path.empty?
+    path = File.join(metadata_path, locale.to_s, "listing_name.txt")
+    return "" unless File.file?(path)
+
+    File.read(path).strip
+  end
+end
+
+Deliver::UploadMetadata.prepend(GFDeliverAppInfoLocalizationFix) if defined?(Deliver::UploadMetadata)
+
+# Correct the 2.232 body. The resource is appInfoLocalizations, so the
+# relationship is appInfo, not appStoreVersion. The tunes client extends this
+# module, so the method has to be redefined on the module itself. Prepending
+# after extend does not replace it.
+if defined?(Spaceship::ConnectAPI::Tunes::API)
+  Spaceship::ConnectAPI::Tunes::API.module_eval do
+    def post_app_info_localization(app_info_id: nil, attributes: {})
+      body = {
+        data: {
+          type: "appInfoLocalizations",
+          attributes: attributes,
+          relationships: {
+            appInfo: {
+              data: {
+                type: "appInfos",
+                id: app_info_id
+              }
+            }
+          }
+        }
+      }
+
+      tunes_request_client.post("v1/appInfoLocalizations", body)
+    end
+  end
+end
+
 # A submitted version still accepts the metadata upload path. Locked field
 # updates must not fail the listing step; validation errors still raise.
 module GFDeliverSubmittedVersionWrite
