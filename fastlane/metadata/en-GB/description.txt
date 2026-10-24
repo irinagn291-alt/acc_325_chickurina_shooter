@@ -1,0 +1,15 @@
+Chicken Shoot is a portrait target-shooting game. You aim a gun at a target, allow for the wind, and try to score as many points as you can before the clock or your shots run out. It is for people who want short rounds of timed target practice, with unlockable guns and sights and a list of achievements.
+
+• Timed target shooting with a two-minute clock shown as mm:ss, turning red in the last ten seconds, and five shots
+• Wind speed and direction, shown as Wind: plus a number, with an arrow for direction
+• Aim by tapping and holding anywhere, moving the sight, then releasing; a faster aim scores more
+• Boost Machine, which grants one boost before the round: No Wind, Maximum Approach, or + 20% for the next shot
+• MISS when a shot scores nothing
+• Status lines Let's Start!, 30 seconds left!, 10 seconds left!, and Time is up!
+• How to Play, with TELL ME MORE!, NEXT, BACK, and DONE, covering STEP 1 through STEP 8
+• SETTINGS for MUSIC, SOUND, and HAPTIC, plus TUTORIAL, FACEBOOK PAGE, PRIVACY POLICY, and TERMS OF USE
+• Achievements shown as COLLECTED out of 45, grouped as IN PROGRESS: and COMPLETED:
+• Several guns and sights; the first gun and the first sight start unlocked, and others stay locked until a condition is met
+• Pause when the app is left during a round; closing settings resumes that same round
+
+Scores, settings, unlocks, and achievement progress stay on this device. English is the only wording on screen, and the app stays in portrait on iPhone.

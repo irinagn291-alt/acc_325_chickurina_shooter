@@ -1,0 +1,1 @@
+target,shooting,wind,sight,boost,achievements,guns,timed,portrait,practice,haptic
